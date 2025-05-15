@@ -1,5 +1,5 @@
 # CSSE4011 Final Project
-## Prosephone-Green
+## Persephone-Green
 ### Group Members
 Lillian Kolb - 47031849  
 Erik Crispin - \
