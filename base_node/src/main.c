@@ -31,15 +31,13 @@
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE DT_ALIAS(led0)
 
+#define MOBILE_PACKET_SIZE 15
+
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
 
 char MOBILE_NODE_ADDR[27] = "D8:F0:FD:6D:A0:ED (random)\0";
 
-struct mobile_base_queue {
-	int8_t sensor_data[6]; // gyro_x gyro_y gyro_z accel_x accel_y accel_z
-};
-
-K_MSGQ_DEFINE(mb_msgq, sizeof(struct mobile_base_queue), 10, 4);
+K_MSGQ_DEFINE(mb_msgq, MOBILE_PACKET_SIZE, 20, 4);
 
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 			 struct net_buf_simple *ad)
@@ -52,8 +50,8 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	// only read data from mobile node
 	if (!strcmp(addr_str, MOBILE_NODE_ADDR)){
 		uint8_t* rec_data = ad->data;
-		struct mobile_base_queue tx_data;
-		memcpy(tx_data.sensor_data, rec_data, 6); //==================================== CHANGE
+		uint8_t tx_data[MOBILE_PACKET_SIZE];
+		memcpy(tx_data, rec_data, MOBILE_PACKET_SIZE); //==================================== CHANGE
 		if (k_msgq_put(&mb_msgq, &tx_data, K_NO_WAIT) != 0) {
 			/* Queue is full, we could purge it, a loop can be
 			* implemented here to keep trying after a purge.
@@ -122,20 +120,26 @@ void base_init(void)
 
 void base_to_pc(void) {
 
-	struct mobile_base_queue rx_data; // struct to receive queue data
-	int8_t sensor_data[6];
+	uint8_t sensor_data[MOBILE_PACKET_SIZE];
 
 	printk("Mobile queue waiting...\n");
 	while (1) {
 		
-		if (k_msgq_get(&mb_msgq, &rx_data, K_FOREVER) == 0) {
+		if (k_msgq_get(&mb_msgq, &sensor_data, K_FOREVER) == 0) {
+
+			uint32_t timestamp = (sensor_data[0] << 16) | (sensor_data[1] << 8) | sensor_data[2];
+			double sensor_vals[6];
+
+			for (int i = 0; i < 6; i++) {
+				sensor_vals[i] = (double)sensor_data[i*2 + 3] + ((double)sensor_data[i*2 + 4])/100;
+			}
 			
-			memcpy(sensor_data, rx_data.sensor_data, 6); // =========================CHANGE 
-			memset(&rx_data, 0, sizeof(struct mobile_base_queue));
+			memset(&sensor_data, 0, MOBILE_PACKET_SIZE);
+
 			char buffer[100];
-			sprintf(buffer, "_sensor_ %d:%d:%d %d:%d:%d %d", sensor_data[0], 
-			sensor_data[1], sensor_data[2], sensor_data[3], sensor_data[4], 
-			sensor_data[5], k_uptime_seconds()); // ================================CHANGE
+			sprintf(buffer, "_sensor_ %d %.2f %.2f %.2f %.2f %.2f %.2f", 
+				timestamp, sensor_vals[0], sensor_vals[1], sensor_vals[2], 
+				sensor_vals[3], sensor_vals[4], sensor_vals[5]); // if this is too slow change doubled to integers
 			print_uart(buffer);
 		}
 	}
@@ -165,7 +169,8 @@ void base_to_actuator(void) {
 	while (1) {
 		// read continuously from uart
 		if (k_msgq_get(&uart_msgq, &read_buffer, K_FOREVER) == 0) {
-			gpio_pin_toggle_dt(&led);
+			// gpio_pin_toggle_dt(&led);
+			// currently code is simply writing back what it received
 			char send_buffer[100];
 
 			uint64_t time_ms = k_uptime_get();
