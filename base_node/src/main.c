@@ -31,7 +31,7 @@
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE DT_ALIAS(led0)
 
-#define MOBILE_PACKET_SIZE 15
+#define MOBILE_PACKET_SIZE 17
 
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
 
@@ -49,6 +49,10 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 
 	// only read data from mobile node
 	if (!strcmp(addr_str, MOBILE_NODE_ADDR)){
+		// for (int i =0; i < ad->len; i++) {
+		// 	printk("%x ", ad->data[i]);
+		// }
+		// printk("\n");
 		uint8_t* rec_data = ad->data;
 		uint8_t tx_data[MOBILE_PACKET_SIZE];
 		memcpy(tx_data, rec_data, MOBILE_PACKET_SIZE); //==================================== CHANGE
@@ -127,14 +131,23 @@ void base_to_pc(void) {
 		
 		if (k_msgq_get(&mb_msgq, &sensor_data, K_FOREVER) == 0) {
 
-			uint32_t timestamp = (sensor_data[0] << 16) | (sensor_data[1] << 8) | sensor_data[2];
+			// for (int i = 0; i < MOBILE_PACKET_SIZE; i++) {
+			// 	printk("%x ", sensor_data[i]);
+			// }
+			// printk("\n");
+
+			uint32_t timestamp = (sensor_data[2] << 16) | (sensor_data[3] << 8) | sensor_data[4];
 			double sensor_vals[6];
 
 			for (int i = 0; i < 6; i++) {
-				sensor_vals[i] = (double)sensor_data[i*2 + 3] + ((double)sensor_data[i*2 + 4])/100;
+				int8_t bignum = (int8_t)sensor_data[i*2 + 5];
+				int8_t littlenum = (int8_t)sensor_data[i*2 + 6];
+				sensor_vals[i] = (double)bignum + ((double)littlenum)/100;
 			}
 			
 			memset(&sensor_data, 0, MOBILE_PACKET_SIZE);
+
+			// printk("%d\n", timestamp);
 
 			char buffer[100];
 			sprintf(buffer, "_sensor_ %d %.2f %.2f %.2f %.2f %.2f %.2f", 
@@ -155,7 +168,7 @@ void base_to_actuator(void) {
 
 	// initial empty array for first advertisement
 	struct bt_data init_array[] = {
-		BT_DATA_BYTES(0x00) 
+		BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA, 0x00) 
 	};
 
 	int error = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, init_array, ARRAY_SIZE(init_array), NULL, 0);
