@@ -12,6 +12,7 @@
  #include <zephyr/sys/util.h>
  #include <zephyr/bluetooth/bluetooth.h>
  #include <zephyr/bluetooth/hci.h>
+ #include <zephyr/drivers/gpio.h>
  
  static int print_samples;
  static int lsm6dsl_trig_cnt;
@@ -19,11 +20,32 @@
  static struct sensor_value accel_x_out, accel_y_out, accel_z_out;
  static struct sensor_value gyro_x_out, gyro_y_out, gyro_z_out;
 
- static uint8_t mfg_data[17];
+ static uint8_t mfg_data[18];
+ 
+ static uint8_t button_state = 0;
 
  static const struct bt_data ad[] = {
     BT_DATA(BT_DATA_MANUFACTURER_DATA, mfg_data, sizeof(mfg_data)),
 };
+
+static const struct gpio_dt_spec button = GPIO_DT_SPEC_GET_OR(DT_ALIAS(sw0), gpios, {0});
+static struct gpio_callback button_cb_data;
+
+static struct gpio_dt_spec led = GPIO_DT_SPEC_GET_OR(DT_ALIAS(led0), gpios, {0});
+
+
+void button_pressed(const struct device *dev, struct gpio_callback *cb, uint32_t pins) {
+    //printk("Button pressed at %" PRIu32 "\n", k_cycle_get_32());
+    //printk("Button Pressed\n");
+    gpio_pin_set_dt(&led, !button_state);
+    if (button_state == 1) {
+        button_state = 0;
+    } else {
+        button_state = 1;
+    }
+    
+    
+}
  
  #ifdef CONFIG_LSM6DSL_TRIGGER
  static void lsm6dsl_trigger_handler(const struct device *dev,
@@ -62,42 +84,87 @@
  int main(void)
  {
 
+    // set up button
+    printk("1");
+    int ret;
+	if (!gpio_is_ready_dt(&button)) {
+		printk("Error: button device %s is not ready\n",
+		       button.port->name);
+		return 0;
+	}
+    printk("2");
+	ret = gpio_pin_configure_dt(&button, GPIO_INPUT);
+	if (ret != 0) {
+		printk("Error %d: failed to configure %s pin %d\n",
+		       ret, button.port->name, button.pin);
+		return 0;
+	}
+    printk("3");
+	ret = gpio_pin_interrupt_configure_dt(&button, GPIO_INT_EDGE_TO_ACTIVE);
+	if (ret != 0) {
+		printk("Error %d: failed to configure interrupt on %s pin %d\n", ret, button.port->name, button.pin);
+		return 0;
+	}
+    printk("4");
+	gpio_init_callback(&button_cb_data, button_pressed, BIT(button.pin));
+	gpio_add_callback(button.port, &button_cb_data);
+	printk("Set up button at %s pin %d\n", button.port->name, button.pin);
+
+    // set up LED
+    if (led.port && !gpio_is_ready_dt(&led)) {
+		printk("Error %d: LED device %s is not ready; ignoring it\n",
+		       ret, led.port->name);
+		led.port = NULL;
+	}
+	if (led.port) {
+		ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT);
+		if (ret != 0) {
+			printk("Error %d: failed to configure LED device %s pin %d\n",
+			       ret, led.port->name, led.pin);
+			led.port = NULL;
+		} else {
+			printk("Set up LED at %s pin %d\n", led.port->name, led.pin);
+		}
+	}
+
 
     // set up bluetooth
-    printk("Starting Broadcaster\n");
-    int err;
-    bt_addr_le_t mobile_addr;
+    // printk("Starting Broadcaster\n");
+    // int err;
+    // bt_addr_le_t mobile_addr;
 
-    // set device address
-    // generated using https://www.browserling.com/tools/random-mac (exception: first 2 bits must be "11")
-    err = bt_addr_le_from_str("D8:F0:FD:6D:A0:ED", "random", &mobile_addr);
-    if (err < 0) {
-        printk("Invalid BT address (err %d)\n", err);
-    }
-    err = bt_id_create(&mobile_addr, NULL);
-    if (err < 0) {
-        printk("Creating new ID failed (err %d)\n", err);
-    }
+    // // set device address
+    // // generated using https://www.browserling.com/tools/random-mac (exception: first 2 bits must be "11")
+    // err = bt_addr_le_from_str("D8:F0:FD:6D:A0:ED", "random", &mobile_addr);
+    // if (err < 0) {
+    //     printk("Invalid BT address (err %d)\n", err);
+    // }
+    // err = bt_id_create(&mobile_addr, NULL);
+    // if (err < 0) {
+    //     printk("Creating new ID failed (err %d)\n", err);
+    // }
         
-    //gpio_pin_toggle_dt(&led);
-    // Initialize the Bluetooth Subsystem 
-    err = bt_enable(NULL);
-    if (err < 0) {
-        printk("Bluetooth init failed (err %d)\n", err);
-        // return 0;
-    } else {
-        printk("Bluetooth enabled\n");
-    }
+    // //gpio_pin_toggle_dt(&led);
+    // // Initialize the Bluetooth Subsystem 
+    // err = bt_enable(NULL);
+    // if (err < 0) {
+    //     printk("Bluetooth init failed (err %d)\n", err);
+    //     // return 0;
+    // } else {
+    //     printk("Bluetooth enabled\n");
+    // }
 
-    printk("Bluetooth initialized\n");
+    // printk("Bluetooth initialized\n");
 
-    err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad), NULL, 0);
-    k_msleep(100);
-    if (err < 0) {
-        printk("Advertising failed to start (err %d)\n", err);
-        return 0;
-    }
+    // err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad), NULL, 0);
+    // k_msleep(100);
+    // if (err < 0) {
+    //     printk("Advertising failed to start (err %d)\n", err);
+    //     return 0;
+    // }
 
+
+    // set up sensor
      int cnt = 0;
      char out_str[64];
      struct sensor_value odr_attr;
@@ -107,7 +174,7 @@
          printk("sensor: device not ready.\n");
          return 0;
      }
- 
+
      /* set accel/gyro sampling frequency to 104 Hz */
      odr_attr.val1 = 104;
      odr_attr.val2 = 0;
@@ -230,25 +297,26 @@
         mfg_data[12] = gyd;
         mfg_data[13] = gzw;
         mfg_data[14] = gzd;
+        mfg_data[15] = button_state;
 
-        int err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), NULL, 0);
-        if (err) {
-            printk("Advertising update error %d\n", err);
-            return err;
+        // int err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), NULL, 0);
+        // if (err) {
+        //     printk("Advertising update error %d\n", err);
+        //     return err;
 
-        }
-        for (int i = 0; i < 15; i++) {
-            printk("%d ", mfg_data[i]);
-            if (i == 14) {
-                printk("\n");
-            }
-        }
+        // }
+        // for (int i = 0; i < 16; i++) {
+        //     printk("%d ", mfg_data[i]);
+        //     if (i == 15) {
+        //         printk("\n");
+        //     }
+        // }
 
-        printk("%.2f %.2f %.2f %.2f %.2f %.2f\n", ax, ay, az, gx, gy, gz);
+        printk("%d %.2f %.2f %.2f %.2f %.2f %.2f %d\n", temp_time, ax, ay, az, gx, gy, gz, button_state);
         //printk("%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", );
  
-        print_samples = 1;
         k_sleep(K_MSEC(100));
+        print_samples = 1;
      }
  }
  
