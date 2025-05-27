@@ -32,7 +32,7 @@
 #define PRIORITY 7
 
 // #define MOBILE_PACKET_SIZE 17
-#define MOBILE_PACKET_SIZE 15
+#define MOBILE_PACKET_SIZE 16
 
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE DT_ALIAS(led0)
@@ -49,8 +49,9 @@ static struct bt_conn *default_conn;
 // discovery parameters
 static struct bt_gatt_discover_params discover_params;
 
-// characteristic handle
-uint16_t char_handle = 14;
+// characteristic handle (when loop runs too fast, must set this as the handle 
+// found when running slow. Discovery function does not set handle correctly)
+uint16_t char_handle = 18;
 
 // Service UUID in bytes, used to comapare to advertising packet
 uint16_t MOBILE_UUID[] = {0xc1, 0xcd, 0xe4, 0x75, 0xa5, 0x11, 0xac, 0x94, 0xf9, 
@@ -140,10 +141,10 @@ static uint8_t read_periph_data_cb(struct bt_conn *conn, uint8_t err,
 	}
 
 	uint8_t *my_arr = ((uint8_t *)data);
-	for (int i = 0; i < MOBILE_PACKET_SIZE; i++) {
-		printk("%x ", my_arr[i]);
-	}
-	printk("\n");
+	// for (int i = 0; i < MOBILE_PACKET_SIZE; i++) {
+	// 	printk("%x ", my_arr[i]);
+	// }
+	// printk("\n");
 
 	uint8_t tx_data[MOBILE_PACKET_SIZE];
 	memcpy(tx_data, my_arr, MOBILE_PACKET_SIZE); //==================================== CHANGE
@@ -281,21 +282,21 @@ void base_init(void)
 
 	/* set MAC address */
 	// use this for advertising to actuator
-	// int err;
-	// bt_addr_le_t base_addr;
+	int err;
+	bt_addr_le_t base_addr;
 
-	// // generated using https://www.browserling.com/tools/random-mac (exception: first 2 bits must be "11")
-	// err = bt_addr_le_from_str("D5:16:43:05:C3:C4", "random", &base_addr);
-	// if (err) {
-	// 	printk("Invalid BT address (err %d)\n", err);
-	// }
+	// generated using https://www.browserling.com/tools/random-mac (exception: first 2 bits must be "11")
+	err = bt_addr_le_from_str("D5:16:43:05:C3:C4", "random", &base_addr);
+	if (err) {
+		printk("Invalid BT address (err %d)\n", err);
+	}
 
-	// err = bt_id_create(&base_addr, NULL);
-	// if (err < 0) {
-	// 	printk("Creating new ID failed (err %d)\n", err);
-	// }
+	err = bt_id_create(&base_addr, NULL);
+	if (err < 0) {
+		printk("Creating new ID failed (err %d)\n", err);
+	}
 
-	int err = bt_enable(NULL);
+	err = bt_enable(NULL);
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
 		return;
@@ -337,15 +338,17 @@ void base_to_pc(void) {
 				int8_t littlenum = (int8_t)sensor_data[i*2 + 4];
 				sensor_vals[i] = (double)bignum + ((double)littlenum)/100;
 			}
+
+			uint8_t button_state = sensor_data[15];
 			
 			memset(&sensor_data, 0, MOBILE_PACKET_SIZE);
 
 			// printk("%d\n", timestamp);
 
 			char buffer[100];
-			sprintf(buffer, "_sensor_ %d %.2f %.2f %.2f %.2f %.2f %.2f", 
+			sprintf(buffer, "_sensor_ %d %.2f %.2f %.2f %.2f %.2f %.2f %d", 
 				timestamp, sensor_vals[0], sensor_vals[1], sensor_vals[2], 
-				sensor_vals[3], sensor_vals[4], sensor_vals[5]); // if this is too slow change doubled to integers
+				sensor_vals[3], sensor_vals[4], sensor_vals[5], button_state); // if this is too slow change doubled to integers
 			print_uart(buffer);
 		}
 	}
@@ -361,7 +364,7 @@ void output(void) {
 }
 
 K_THREAD_DEFINE(base_init_id, STACKSIZE, base_init, NULL, NULL, NULL,
-	PRIORITY, 0, 0);
+	PRIORITY - 1, 0, 0);
 
 K_THREAD_DEFINE(base_to_pc_id, STACKSIZE, base_to_pc, NULL, NULL, NULL,
 	PRIORITY, 0, 0);
