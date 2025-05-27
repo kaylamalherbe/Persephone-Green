@@ -68,7 +68,8 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb, uint32_t
 // This function is called when the connected device wants to read the characteristic data
 static ssize_t read_data(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 	void *buf, uint16_t len, uint16_t offset) {
-	return bt_gatt_attr_read(conn, attr, buf, len, offset, &send_arr, sizeof(send_arr));
+    printk("reading: %x %x %x", mfg_data[0], mfg_data[1], mfg_data[2]);
+	return bt_gatt_attr_read(conn, attr, buf, len, offset, &mfg_data, sizeof(mfg_data));
 }
 
 // Defining the service and characteristic of the service
@@ -376,7 +377,7 @@ int main(void)
         mfg_data[12] = gyd;
         mfg_data[13] = gzw;
         mfg_data[14] = gzd;
-        mfg_data[15] = button_state;
+        //mfg_data[15] = button_state;
 
 
         // ============ DELETE, NO LONGER NEED TO UPDATE ADVERTISING ========
@@ -396,7 +397,7 @@ int main(void)
         printk("%d %.2f %.2f %.2f %.2f %.2f %.2f %d\n", temp_time, ax, ay, az, gx, gy, gz, button_state);
         //printk("%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", );
 
-        k_sleep(K_MSEC(100));
+        k_sleep(K_MSEC(10));
         print_samples = 1;
     }
 }
