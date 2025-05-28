@@ -254,33 +254,44 @@ def reading_thread():
                     read_str = ""
                     count = 0
 
+
                 # shift window 
                 if len(data) == window:
                     prediction = process_data(data, window, rf_classifier) # this should be performed while data is still being collected
-                    data = data[shift:]
+                    prediction = prediction[0].item()
                     # print(prediction)
                     time = datetime.now().timestamp()
                     # print("comparing times", lastTime, time)
-                    if prediction[0].item() != 0 and time-lastTime > 3:
-                        # in here send to uart
+                    if prediction != 0 and time-lastTime > 3:
+                        
+                        if prediction== 2:
+                            if data[0][-1] == '1': # check if button is down then team 2
+                                print(data[0][-1])
+
+                                prediction = 4
+                                # print(prediction)
+                                score2 += 5
+                                json = add_to_payload("score2", score2)
+                                payload.append(json)
+                            else: # button not down team 1
+                                score1 += 5
+                                json = add_to_payload("score1", score1)
+                                payload.append(json)
+                                
                         classif_count += 1
-                        uart_str = "c " + str(prediction[0].item()) + " " + str(classif_count) + "\n"
+                        uart_str = "c " + str(prediction) + " " + str(classif_count) + "\n"
                         send_uart(uart_str)
 
-                        # add to payload
-                        json = add_to_payload("Classification", prediction[0].item())
+                        json = add_to_payload("Classification", prediction)
                         payload.append(json)
-                        if prediction[0].item() == 2:
-                            score1 += 5
-                            json = add_to_payload("score1", score1)
-                            payload.append(json)
-                        # send to dash
                         send_to_dashboard()
                         lastTime = time
-                    elif prediction[0].item()==0 and time-lastTime > 10:
-                        json = add_to_payload("Classification", prediction[0].item())
+                    if prediction == 0 and time-lastTime > 10:
+                        json = add_to_payload("Classification", prediction)
                         payload.append(json)
-                        lastTime = time
+                        send_to_dashboard()
+                        lastTime = time - 3
+                    data = data[shift:]
 
                 # This code is for when collecting data for the machine
                 # if (data_count >= CSV_SIZE):
@@ -340,14 +351,14 @@ def send_from_user():
             
             try:
                 val = int(split_in[1])
-                if (val == 1 or val == 2 or val == 3):
+                if (val == 1 or val == 2 or val == 3 or val == 4):
                     global classif_count
                     classif_count += 1
                     write_str = write_str + " " + str(classif_count) + "\n"
                     send_uart(write_str)                    # sends to uart
                 else:
                     # 2nd argument is not a valid input number
-                    errorLabel.config(text="Error: Invalid input value, enter 1~3")
+                    errorLabel.config(text="Error: Invalid input value, enter 1~4")
             except ValueError:
                 # 2nd argument is not a number
                 errorLabel.config(text="Error: Invalid input type, enter an int")
