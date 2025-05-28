@@ -14,6 +14,7 @@
 #include <zephyr/sys/printk.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <zephyr/drivers/gpio.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
@@ -52,6 +53,8 @@ static struct bt_gatt_discover_params discover_params;
 // characteristic handle (when loop runs too fast, must set this as the handle 
 // found when running slow. Discovery function does not set handle correctly)
 uint16_t char_handle = 18;
+
+static char sensor_state = '1';
 
 // Service UUID in bytes, used to comapare to advertising packet
 uint16_t MOBILE_UUID[] = {0xc1, 0xcd, 0xe4, 0x75, 0xa5, 0x11, 0xac, 0x94, 0xf9, 
@@ -315,41 +318,46 @@ void base_to_pc(void) {
 	while (1) {
 		
 		if (k_msgq_get(&mb_msgq, &sensor_data, K_FOREVER) == 0) {
+			if (sensor_state == '1') {
+				// for (int i = 0; i < MOBILE_PACKET_SIZE; i++) {
+				// 	printk("%x ", sensor_data[i]);
+				// }
+				// printk("\n");
 
-			// for (int i = 0; i < MOBILE_PACKET_SIZE; i++) {
-			// 	printk("%x ", sensor_data[i]);
-			// }
-			// printk("\n");
+				// uint32_t timestamp = (sensor_data[2] << 16) | (sensor_data[3] << 8) | sensor_data[4];
+				// double sensor_vals[6];
 
-			// uint32_t timestamp = (sensor_data[2] << 16) | (sensor_data[3] << 8) | sensor_data[4];
-			// double sensor_vals[6];
+				// for (int i = 0; i < 6; i++) {
+				// 	int8_t bignum = (int8_t)sensor_data[i*2 + 5];
+				// 	int8_t littlenum = (int8_t)sensor_data[i*2 + 6];
+				// 	sensor_vals[i] = (double)bignum + ((double)littlenum)/100;
+				// }
 
-			// for (int i = 0; i < 6; i++) {
-			// 	int8_t bignum = (int8_t)sensor_data[i*2 + 5];
-			// 	int8_t littlenum = (int8_t)sensor_data[i*2 + 6];
-			// 	sensor_vals[i] = (double)bignum + ((double)littlenum)/100;
-			// }
+				uint32_t timestamp = (sensor_data[0] << 16) | (sensor_data[1] << 8) | sensor_data[2];
+				double sensor_vals[6];
 
-			uint32_t timestamp = (sensor_data[0] << 16) | (sensor_data[1] << 8) | sensor_data[2];
-			double sensor_vals[6];
+				for (int i = 0; i < 6; i++) {
+					int8_t bignum = (int8_t)sensor_data[i*2 + 3];
+					int8_t littlenum = (int8_t)sensor_data[i*2 + 4];
+					sensor_vals[i] = (double)bignum + ((double)littlenum)/100;
+				}
 
-			for (int i = 0; i < 6; i++) {
-				int8_t bignum = (int8_t)sensor_data[i*2 + 3];
-				int8_t littlenum = (int8_t)sensor_data[i*2 + 4];
-				sensor_vals[i] = (double)bignum + ((double)littlenum)/100;
+				uint8_t button_state = sensor_data[15];
+				
+				memset(&sensor_data, 0, MOBILE_PACKET_SIZE);
+
+				// printk("%d\n", timestamp);
+
+				char buffer[100];
+				sprintf(buffer, "_sensor_ %d %.2f %.2f %.2f %.2f %.2f %.2f %d", 
+					timestamp, sensor_vals[0], sensor_vals[1], sensor_vals[2], 
+					sensor_vals[3], sensor_vals[4], sensor_vals[5], button_state); // if this is too slow change doubled to integers
+				print_uart(buffer);
+			} else {
+				// sensor is turned off, clear queue data
+				memset(&sensor_data, 0, MOBILE_PACKET_SIZE);
+				k_sleep(K_MSEC(100));
 			}
-
-			uint8_t button_state = sensor_data[15];
-			
-			memset(&sensor_data, 0, MOBILE_PACKET_SIZE);
-
-			// printk("%d\n", timestamp);
-
-			char buffer[100];
-			sprintf(buffer, "_sensor_ %d %.2f %.2f %.2f %.2f %.2f %.2f %d", 
-				timestamp, sensor_vals[0], sensor_vals[1], sensor_vals[2], 
-				sensor_vals[3], sensor_vals[4], sensor_vals[5], button_state); // if this is too slow change doubled to integers
-			print_uart(buffer);
 		}
 	}
 }
@@ -374,17 +382,18 @@ K_THREAD_DEFINE(output_id, STACKSIZE, output, NULL, NULL, NULL,
 
 // test mobile to base before implementing
 void base_to_actuator(void) {
+	// k_sleep(K_MSEC(1000));
 
 	// initial empty array for first advertisement
-	struct bt_data init_array[] = {
-		BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA, 0x00) 
-	};
+	// struct bt_data init_array[] = {
+	// 	BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA, 0x00) 
+	// };
 
-	int error = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, init_array, ARRAY_SIZE(init_array), NULL, 0);
-	if (error) {
-		printk("Advertising start error %d\n", error);
-		return;
-	}
+	// int error = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, init_array, ARRAY_SIZE(init_array), NULL, 0);
+	// if (error) {
+	// 	printk("Advertising start error %d\n", error);
+	// 	return;
+	// }
 
 	char read_buffer[MSG_SIZE];
 
@@ -393,18 +402,32 @@ void base_to_actuator(void) {
 		if (k_msgq_get(&uart_msgq, &read_buffer, K_FOREVER) == 0) {
 			// gpio_pin_toggle_dt(&led);
 			// currently code is simply writing back what it received
-			char send_buffer[100];
 
-			uint64_t time_ms = k_uptime_get();
-			uint32_t time_sec = time_ms/1000;
+			if (read_buffer[0] == 'c' && read_buffer[1] == ' ') {
+				// this is classification information, forward to actuator node
+				// print_uart("_sensor_ Received classification\n");
 
-			sprintf(send_buffer, "%dsec %lldms %llx %s", time_sec, time_ms%1000, time_ms, read_buffer);
-			print_uart(send_buffer);
+
+			} else if (read_buffer[0] == 's' && read_buffer[1] == ' ') {
+				// this turns uart on and off
+				if (read_buffer[2] == '1' || read_buffer[2] == '0'){
+					sensor_state = read_buffer[2];
+				}
+				// printk("Sensor state: %d %c [%s]\n", sensor_state, read_buffer[2], read_buffer);
+			}
+
+			// char send_buffer[100];
+
+			// uint64_t time_ms = k_uptime_get();
+			// uint32_t time_sec = time_ms/1000;
+
+			// sprintf(send_buffer, "%dsec %lldms %llx %s", time_sec, time_ms%1000, time_ms, read_buffer);
+			// print_uart(send_buffer);
 			// print_uart(read_buffer);
 		}
 	}
 }
 
-// K_THREAD_DEFINE(base_to_actuator_id, STACKSIZE, base_to_actuator, NULL, NULL, NULL, 
-// 	PRIORITY, 0, 0);
+K_THREAD_DEFINE(base_to_actuator_id, STACKSIZE, base_to_actuator, NULL, NULL, NULL, 
+	PRIORITY, 0, 0);
 
