@@ -3,7 +3,7 @@
 * @file    base_node.c
 * @author  Lillian Kolb
 * @date    23/04/2025 
-* @brief   Prac 3 Base node file
+* @brief   Final proj Base node file
 ******************************************************************************
 */
 
@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 #include <zephyr/drivers/gpio.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
@@ -319,19 +320,6 @@ void base_to_pc(void) {
 		
 		if (k_msgq_get(&mb_msgq, &sensor_data, K_FOREVER) == 0) {
 			if (sensor_state == '1') {
-				// for (int i = 0; i < MOBILE_PACKET_SIZE; i++) {
-				// 	printk("%x ", sensor_data[i]);
-				// }
-				// printk("\n");
-
-				// uint32_t timestamp = (sensor_data[2] << 16) | (sensor_data[3] << 8) | sensor_data[4];
-				// double sensor_vals[6];
-
-				// for (int i = 0; i < 6; i++) {
-				// 	int8_t bignum = (int8_t)sensor_data[i*2 + 5];
-				// 	int8_t littlenum = (int8_t)sensor_data[i*2 + 6];
-				// 	sensor_vals[i] = (double)bignum + ((double)littlenum)/100;
-				// }
 
 				uint32_t timestamp = (sensor_data[0] << 16) | (sensor_data[1] << 8) | sensor_data[2];
 				double sensor_vals[6];
@@ -382,20 +370,21 @@ K_THREAD_DEFINE(output_id, STACKSIZE, output, NULL, NULL, NULL,
 
 // test mobile to base before implementing
 void base_to_actuator(void) {
-	// k_sleep(K_MSEC(1000));
+	k_sleep(K_MSEC(1000)); // wait for bt_enable
 
 	// initial empty array for first advertisement
-	// struct bt_data init_array[] = {
-	// 	BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA, 0x00) 
-	// };
+	struct bt_data init_array[] = {
+		BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA, 0x00) 
+	};
 
-	// int error = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, init_array, ARRAY_SIZE(init_array), NULL, 0);
-	// if (error) {
-	// 	printk("Advertising start error %d\n", error);
-	// 	return;
-	// }
+	int error = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, init_array, ARRAY_SIZE(init_array), NULL, 0);
+	if (error) {
+		printk("Advertising start error %d\n", error);
+		return;
+	}
 
 	char read_buffer[MSG_SIZE];
+	uint8_t send_packet[2];
 
 	while (1) {
 		// read continuously from uart
@@ -405,8 +394,34 @@ void base_to_actuator(void) {
 
 			if (read_buffer[0] == 'c' && read_buffer[1] == ' ') {
 				// this is classification information, forward to actuator node
-				// print_uart("_sensor_ Received classification\n");
+				uint8_t class_num = read_buffer[2] - '0'; // converts char to int
+				
+				// find size of classification count
+				uint8_t class_count_size = 0;
+				for (int i = 4; i < MSG_SIZE; i++) {
+					if (read_buffer[i] == '\0'){
+						class_count_size = i - 4;
+						break;
+					}
+				}
+				char class_count_str[class_count_size + 1];
+				memcpy(class_count_str, &read_buffer[4], class_count_size + 1);
+				uint8_t class_count = atoi(class_count_str);
 
+				// printk("classnum %d classcount %d\n", class_num, class_count);
+
+				send_packet[0] = class_num;
+				send_packet[1] = class_count;
+
+				struct bt_data sending_array[] = {
+					BT_DATA(BT_DATA_MANUFACTURER_DATA, send_packet, sizeof(send_packet))
+				};
+				// update advertising data with new bt_data array
+				error = bt_le_adv_update_data(sending_array, ARRAY_SIZE(sending_array), NULL, 0);
+				if (error) {
+					printk("Advertising update error %d\n", error);
+					return;
+				}
 
 			} else if (read_buffer[0] == 's' && read_buffer[1] == ' ') {
 				// this turns uart on and off
@@ -415,19 +430,9 @@ void base_to_actuator(void) {
 				}
 				// printk("Sensor state: %d %c [%s]\n", sensor_state, read_buffer[2], read_buffer);
 			}
-
-			// char send_buffer[100];
-
-			// uint64_t time_ms = k_uptime_get();
-			// uint32_t time_sec = time_ms/1000;
-
-			// sprintf(send_buffer, "%dsec %lldms %llx %s", time_sec, time_ms%1000, time_ms, read_buffer);
-			// print_uart(send_buffer);
-			// print_uart(read_buffer);
 		}
 	}
 }
 
 K_THREAD_DEFINE(base_to_actuator_id, STACKSIZE, base_to_actuator, NULL, NULL, NULL, 
 	PRIORITY, 0, 0);
-
