@@ -3,7 +3,7 @@
 This is the code for the base node which uses the nrf52840dk/nrf5240. 
 It reads Bluetooth packets from the mobile node and sends it to UART for 
 processing. It also receives classification data from UART and broadcasts 
-bluetooth packets to the actuator node.  
+bluetooth packets to the actuator node (led display).  
 
 ## FLashing the NRF52840DK  
 
