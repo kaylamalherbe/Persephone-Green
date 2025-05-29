@@ -1,0 +1,44 @@
+/ {
+    gpios {
+        compatible = "gpio-leds";
+        red_one: red_one{
+            gpios = <&gpio1 1 GPIO_ACTIVE_HIGH>;
+        };
+        green_one: green_one{
+            gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
+        };
+        blue_one: blue_one{
+            gpios = <&gpio1 3 GPIO_ACTIVE_HIGH>;
+        };
+        red_two: red_two{
+            gpios = <&gpio1 4 GPIO_ACTIVE_HIGH>;
+        };
+        green_two: green_two{
+            gpios = <&gpio1 5 GPIO_ACTIVE_HIGH>;
+        };
+        blue_two: blue_two{
+            gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
+        };
+        a_pin: a_pin{
+            gpios = <&gpio1 7 GPIO_ACTIVE_HIGH>;
+        };
+        b_pin: b_pin{
+            gpios = <&gpio1 8 GPIO_ACTIVE_HIGH>;
+        };
+        c_pin: c_pin{
+            gpios = <&gpio1 10 GPIO_ACTIVE_HIGH>;
+        };
+        d_pin: d_pin{
+            gpios = <&gpio1 11 GPIO_ACTIVE_HIGH>;
+        };
+        clock_pin: clk_pin{
+            gpios = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+        };
+        latch_pin: latch_pin{
+            gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
+        };
+        e_pin: e_pin{
+            gpios = <&gpio1 14 GPIO_ACTIVE_HIGH>;
+        };
+    };
+};
