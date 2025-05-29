@@ -15,4 +15,4 @@ Send commands by writing in the "Shell Commands: " entry box and clicking the
 
 The following are valid commands:  
 ``s {0/1}`` -> stop/start sensor reading  
-``c {1/2/3/4}`` -> send manual classification input, 1 - Halftime, 2 - Team 1 scores, 3 - Advantage, 4 - Team 2 scores  
+``c {1/2/3/4}`` -> send manual classification input (Halftime/Team 1 scores/Advantage/Team 2 scores)  
