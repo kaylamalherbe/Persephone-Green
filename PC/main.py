@@ -200,6 +200,7 @@ ser = serial.Serial()
 CSV_SIZE = 1200
 data_count = 0
 classif_count = 0 # count for the number of classifications found so far
+htft_count = 0
 
 def send_uart(input_str):
     global ser # check
@@ -218,6 +219,7 @@ def reading_thread():
         global score2
         global payload
         global classif_count
+        global htft_count
 
         ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
         count = 0
@@ -248,12 +250,23 @@ def reading_thread():
 
                     split_str.pop(0)
                     data.append(split_str)
+                    
                     # data_count += 1
                 
                 if (count > 25):
                     read_str = ""
                     count = 0
-
+                
+                if (htft_count == 2):
+                    # send FT score reset 
+                    score1 = 0
+                    score2 = 0
+                    json = add_to_payload("score1", score1)
+                    payload.append(json)
+                    json = add_to_payload("score2", score2)
+                    payload.append(json)
+                    send_to_dashboard()
+                    htft_count = 0
 
                 # shift window 
                 if len(data) == window:
@@ -263,7 +276,8 @@ def reading_thread():
                     time = datetime.now().timestamp()
                     # print("comparing times", lastTime, time)
                     if prediction != 0 and time-lastTime > 3:
-                        
+                        if prediction == 1:
+                            htft_count += 1
                         if prediction== 2:
                             if data[0][-1] == '1': # check if button is down then team 2
                                 # print(data[0][-1])
@@ -354,6 +368,11 @@ def send_from_user():
                 if (val == 1 or val == 2 or val == 3 or val == 4):
                     global classif_count
                     classif_count += 1
+
+                    if (val == 1):
+                        global htft_count
+                        htft_count += 1
+
                     write_str = write_str + " " + str(classif_count) + "\n"
                     send_uart(write_str)                    # sends to uart
                 else:
