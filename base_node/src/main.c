@@ -2,7 +2,7 @@
 ******************************************************************************
 * @file    base_node.c
 * @author  Lillian Kolb
-* @date    23/04/2025 
+* @date    29/04/2025 
 * @brief   Final proj Base node file
 ******************************************************************************
 */
@@ -55,6 +55,7 @@ static struct bt_gatt_discover_params discover_params;
 // found when running slow. Discovery function does not set handle correctly)
 uint16_t char_handle = 18;
 
+// determined whether the sensor information is send to UART or not
 static char sensor_state = '1';
 
 // Service UUID in bytes, used to comapare to advertising packet
@@ -273,6 +274,7 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.disconnected = disconnected,
 };
 
+// 
 void base_init(void)
 {
 	if (!gpio_is_ready_dt(&led)) {
@@ -300,6 +302,7 @@ void base_init(void)
 		printk("Creating new ID failed (err %d)\n", err);
 	}
 
+	// enable Bluetooth
 	err = bt_enable(NULL);
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
@@ -311,6 +314,7 @@ void base_init(void)
 	start_scan();
 }
 
+// Thread that writes the sensor data read to UART 
 void base_to_pc(void) {
 
 	uint8_t sensor_data[MOBILE_PACKET_SIZE];
@@ -320,17 +324,18 @@ void base_to_pc(void) {
 		
 		if (k_msgq_get(&mb_msgq, &sensor_data, K_FOREVER) == 0) {
 			if (sensor_state == '1') {
-
+				// decode the byte array received from Bluetooth
 				uint32_t timestamp = (sensor_data[0] << 16) | (sensor_data[1] << 8) | sensor_data[2];
 				double sensor_vals[6];
 
+				// decoding from unsigned int to doubles
 				for (int i = 0; i < 6; i++) {
-					int8_t bignum = (int8_t)sensor_data[i*2 + 3];
-					int8_t littlenum = (int8_t)sensor_data[i*2 + 4];
+					int8_t bignum = (int8_t)sensor_data[i*2 + 3]; 		// integer val
+					int8_t littlenum = (int8_t)sensor_data[i*2 + 4];	// decimal val
 					sensor_vals[i] = (double)bignum + ((double)littlenum)/100;
 				}
 
-				uint8_t button_state = sensor_data[15];
+				uint8_t button_state = sensor_data[15];			// state of button on board
 				
 				memset(&sensor_data, 0, MOBILE_PACKET_SIZE);
 
@@ -340,7 +345,7 @@ void base_to_pc(void) {
 				sprintf(buffer, "_sensor_ %d %.2f %.2f %.2f %.2f %.2f %.2f %d", 
 					timestamp, sensor_vals[0], sensor_vals[1], sensor_vals[2], 
 					sensor_vals[3], sensor_vals[4], sensor_vals[5], button_state); // if this is too slow change doubled to integers
-				print_uart(buffer);
+				print_uart(buffer); 		// send to UART
 			} else {
 				// sensor is turned off, clear queue data
 				memset(&sensor_data, 0, MOBILE_PACKET_SIZE);
@@ -368,7 +373,7 @@ K_THREAD_DEFINE(base_to_pc_id, STACKSIZE, base_to_pc, NULL, NULL, NULL,
 K_THREAD_DEFINE(output_id, STACKSIZE, output, NULL, NULL, NULL,
 	PRIORITY, 0, 0);
 
-// test mobile to base before implementing
+// Thread that reads UART and either stops UART writing or advertises classification data
 void base_to_actuator(void) {
 	k_sleep(K_MSEC(1000)); // wait for bt_enable
 
@@ -389,9 +394,6 @@ void base_to_actuator(void) {
 	while (1) {
 		// read continuously from uart
 		if (k_msgq_get(&uart_msgq, &read_buffer, K_FOREVER) == 0) {
-			// gpio_pin_toggle_dt(&led);
-			// currently code is simply writing back what it received
-
 			if (read_buffer[0] == 'c' && read_buffer[1] == ' ') {
 				// this is classification information, forward to actuator node
 				uint8_t class_num = read_buffer[2] - '0'; // converts char to int

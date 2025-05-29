@@ -266,7 +266,7 @@ def reading_thread():
                         
                         if prediction== 2:
                             if data[0][-1] == '1': # check if button is down then team 2
-                                print(data[0][-1])
+                                # print(data[0][-1])
 
                                 prediction = 4
                                 # print(prediction)

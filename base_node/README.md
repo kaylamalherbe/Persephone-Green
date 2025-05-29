@@ -15,6 +15,7 @@ You can build the program by calling:
 And you can flash the program by calling:  
 ``west flash``  
 
-On a successful flash, you should see LED1 on board lit up.  
+When the mobile node is connected to the base via Bluetooth, you should see 
+LED1 on the board light up.  
 
 ``screen /dev/ttyACM0 115200`` - to connect to terminal input  
