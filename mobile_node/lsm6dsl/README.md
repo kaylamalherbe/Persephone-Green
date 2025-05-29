@@ -13,5 +13,9 @@ a consistent position for the machine to classify the sensor values. Hold it lik
 ![Holding_pos_mobile_node](https://github.com/user-attachments/assets/2131d6ee-b23b-441b-a942-9097070700b9)  
 
 ## Flashing to Disco L475 IOT01  
+To flash to the disco board, use the following commands:\
+Build:\
+west build -b disco_l475_iot1 $FILEPATH$/lsm6dsl --pristine\
+Flash:\
+west flash --runner jlink
 
-Flash instructions here
